@@ -91,6 +91,8 @@ struct qgen_bucket {
 };
 
 struct qgen_otree {
+    uint8_t width;
+    uint8_t __Reserved0[7];
     size_t node_count;
     qgen_otree_node_t *nodes;
     size_t pattern_count;
@@ -106,7 +108,7 @@ extern const uint8_t QGEN_FILE_MAGIC[];
 #define QGEN_FILE_MIN_VERSION_SUPPORTED 0
 #define QGEN_FILE_MAX_VERSION_SUPPORTED 0
 
-static const uint8_t QGEN_FILE_MAGIC[] = {0x07, 0x12, 0xEE, 0x2E};
+const uint8_t QGEN_FILE_MAGIC[] = {0x07, 0x12, 0xEE, 0x2E};
 #endif
 
 #define QGEN_FILE_VERSION(flags) (flags >> 24)
@@ -152,8 +154,7 @@ QGEN_EXPORT void qgen_free_array_list(void *arr);
 typedef struct qgen_otree_gen qgen_otree_gen_t;
 
 struct qgen_otree_gen {
-    uint8_t width;
-    uint8_t __Reserved0[7];
+    uint8_t __Reserved0[8];
     size_t node_capacity, bucket_capacity;
     uint64_t mask_low, mask_high;
     qgen_otree_t tree;
@@ -167,6 +168,7 @@ void qgen_find_cared_bits(qgen_otree_gen_t *tree);
 QGEN_EXPORT qgen_otree_t *qgen_generate_tree(qgen_bitpattern_t *patterns);
 QGEN_EXPORT intptr_t qgen_tree_dispatch(qgen_otree_t *tree, uint64_t high, uint64_t low);
 QGEN_EXPORT void qgen_export_to_dot(qgen_otree_t *tree, const char *filename);
+QGEN_EXPORT uint8_t qgen_tree_max_width(qgen_otree_t *tree);
 QGEN_EXPORT void qgen_free_tree(qgen_otree_t *tree);
 
 #endif // QGEN_H

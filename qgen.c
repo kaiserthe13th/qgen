@@ -8,7 +8,7 @@
 qgen_bitpattern_t qgen_str2bp(size_t length, const char *pattern) {
     qgen_bitpattern_t bp = {0};
 
-    for (int i = 0; i < length; i++) {
+    for (size_t i = 0; i < length; i++) {
         int u64_pos = bp.width >= 64; // 1 for high 64 bits, 0 for low 64 bits
 
         switch (pattern[i]) {
@@ -110,11 +110,9 @@ void qgen_free_array_list(void *arr) {
 void qgen_find_cared_bits(qgen_otree_gen_t *tree) {
     tree->mask_low = 0;
     tree->mask_high = 0;
-    tree->width = 0;
-    for (int i = 0; i < tree->tree.pattern_count; i++) {
+    for (size_t i = 0; i < tree->tree.pattern_count; i++) {
         tree->mask_high |= tree->tree.patterns[i].mask_high;
         tree->mask_low |= tree->tree.patterns[i].mask_low;
-        tree->width = tree->width >= tree->tree.patterns[i].width ? tree->width : tree->tree.patterns[i].width;
     }
 }
 
@@ -172,7 +170,7 @@ int qgen_generate_tree_helper(qgen_otree_gen_t *gentree, size_t *patterns) {
     uint64_t best_bit_idx = -1;
     uint64_t gini_nom = 0xffffffffffffffffULL;
     uint64_t gini_denom = 1;
-    for (uint64_t bit_idx = 0; bit_idx < gentree->width; bit_idx++) {
+    for (uint64_t bit_idx = 0; bit_idx < tree->width; bit_idx++) {
         uint64_t low_mask = 0;
         uint64_t high_mask = 0;
 
@@ -280,6 +278,24 @@ qgen_otree_t *qgen_generate_tree(qgen_bitpattern_t *patterns) {
     qgen_otree_gen_t gentree = {0};
     gentree.tree.patterns = patterns;
     gentree.tree.pattern_count = patterns_head->length;
+
+    // Find max width
+    gentree.tree.width = 0;
+    for (size_t i = 0; i < gentree.tree.pattern_count; i++) {
+        gentree.tree.width = gentree.tree.width >= gentree.tree.patterns[i].width ? gentree.tree.width : gentree.tree.patterns[i].width;
+    }
+
+    for (size_t i = 0; i < patterns_head->length; i++) {
+        uint64_t shift = gentree.tree.width - patterns[i].width;
+        uint64_t backshift = 64 - shift;
+
+        patterns[i].active_high <<= shift;
+        patterns[i].mask_high <<= shift;
+        patterns[i].active_high |= patterns[i].active_low >> backshift;
+        patterns[i].mask_high |= patterns[i].mask_low >> backshift;
+        patterns[i].active_low <<= shift;
+        patterns[i].mask_low <<= shift;
+    }
     qgen_find_cared_bits(&gentree);
     
     size_t *pats = qgen_new_array_list(patterns_head->length, sizeof(size_t));
@@ -319,11 +335,11 @@ static void qgen_export_dot_helper(FILE *f, qgen_otree_t *tree, size_t node_idx)
         // Render Leaf Node (Box shape)
         fprintf(
             f,
-            "    node_%zu [shape=record, style=filled, fillcolor=lightgrey, "
-            "label=\"{LEAF | Pat Count: %zu | Bucket ID: %zu}\"];\n", 
-            node_idx,
-            bucket->pattern_count,
-            bucket_id
+            "    node_%"PRIuPTR" [shape=record, style=filled, fillcolor=lightgrey, "
+            "label=\"{LEAF | Pat Count: %"PRIuPTR" | Bucket ID: %"PRIuPTR"}\"];\n", 
+            (uintptr_t) node_idx,
+            (uintptr_t) bucket->pattern_count,
+            (uintptr_t) bucket_id
         );
         return;
     }
@@ -333,9 +349,9 @@ static void qgen_export_dot_helper(FILE *f, qgen_otree_t *tree, size_t node_idx)
     uint64_t bit = QGEN_NODE_SPLIT_BIT(node);
     fprintf(
         f,
-        "    node_%zu [shape=ellipse, style=filled, fillcolor=white, label=\"Bit %" PRIu64 "\"];\n", 
-        node_idx,
-        bit
+        "    node_%"PRIuPTR" [shape=ellipse, style=filled, fillcolor=white, label=\"Bit %" PRIu64 "\"];\n", 
+        (uintptr_t) node_idx,
+        (uintptr_t) bit
     );
 
     // Edges
@@ -343,10 +359,10 @@ static void qgen_export_dot_helper(FILE *f, qgen_otree_t *tree, size_t node_idx)
     size_t one_idx  = QGEN_NODE_RIGHT(node);
 
     // 0 Edge (False/Low) - Dotted line
-    fprintf(f, "    node_%zu -> node_%zu [label=\"0\", style=dashed];\n", node_idx, zero_idx);
+    fprintf(f, "    node_%"PRIuPTR" -> node_%"PRIuPTR" [label=\"0\", style=dashed];\n", (uintptr_t) node_idx, (uintptr_t) zero_idx);
     
     // 1 Edge (True/High) - Solid line
-    fprintf(f, "    node_%zu -> node_%zu [label=\"1\", style=bold];\n", node_idx, one_idx);
+    fprintf(f, "    node_%"PRIuPTR" -> node_%"PRIuPTR" [label=\"1\", style=bold];\n", (uintptr_t) node_idx, (uintptr_t) one_idx);
 
     // Recurse
     qgen_export_dot_helper(f, tree, zero_idx);
@@ -410,4 +426,8 @@ intptr_t qgen_tree_dispatch(qgen_otree_t *tree, uint64_t high, uint64_t low) {
         int bit_set = split_bit >= 64 ? ((high >> (split_bit - 64)) & 1) : ((low >> split_bit) & 1);
         node_id = bit_set ? QGEN_NODE_RIGHT(node): QGEN_NODE_LEFT(node);
     }
+}
+
+uint8_t qgen_tree_max_width(qgen_otree_t *tree) {
+    return tree->width;
 }
